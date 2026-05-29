@@ -1,0 +1,6 @@
+[DEFAULT]
+# Add default configuration here
+batch_size = 1
+
+[TEST]
+batch_size = 1

@@ -1,0 +1,14 @@
+name: Bitcoin Optech
+
+on:
+  schedule:
+    - cron: '0 13 * * 3' # every Wednesday at 1pm UTC
+  workflow_dispatch:
+  repository_dispatch:
+
+jobs:
+  bitcointranscripts:
+    uses: ./.github/workflows/scrape-source.yml
+    with:
+      source: bitcoinops
+    secrets: inherit
