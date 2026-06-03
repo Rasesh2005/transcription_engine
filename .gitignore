@@ -139,3 +139,4 @@ test_feats/
 logs/
 metadata/
 scripts/
+.github/.DS_Store
