@@ -25,25 +25,51 @@ class BipsSpider(CrawlSpider):
 
         soup = BeautifulSoup(response.text, "html.parser")
         script_tags = soup.find_all("script")
-        res = script_tags[-1]
-        json_object = json.loads(res.contents[0])
+        json_object = None
+        for script in script_tags:
+            try:
+                if script.string:
+                    data = json.loads(script.string)
+                    if "payload" in data:
+                        json_object = data
+                        break
+            except Exception:
+                continue
+        if not json_object:
+            return None
+            
         payload = json_object["payload"]
-        body_to_be_parsed = payload["blob"]["richText"]
-        bip_details = BeautifulSoup(body_to_be_parsed, "html.parser").find("pre").text
+        if "blob" in payload and "richText" in payload["blob"]:
+            body_to_be_parsed = payload["blob"]["richText"]
+        else:
+            raw_lines = payload.get("codeViewBlobLayoutRoute.StyledBlob", {}).get("rawLines", [])
+            body_to_be_parsed = "\n".join(raw_lines)
+            
+        try:
+            bip_details = BeautifulSoup(body_to_be_parsed, "html.parser").find("pre").text
+        except Exception:
+            # Fallback for raw text: just grab the first 25 lines (usually contains metadata)
+            bip_details = "\n".join(body_to_be_parsed.split("\n")[:25])
+            
         metadata = self.parse_details(bip_details)
         item["id"] = "bips-" + str(uuid.uuid4())
-        item["title"] = metadata.get("Title")[0]
+        
+        # Robustly handle missing metadata fields
+        titles = metadata.get("Title")
+        item["title"] = titles[0] if titles else "Untitled"
 
         if not item["title"]:
             return None
 
-        item["body_formatted"] = strip_attributes(body_to_be_parsed)
-        item["body"] = strip_tags(body_to_be_parsed)
+        item["body_formatted"] = strip_attributes(body_to_be_parsed) if "<" in body_to_be_parsed else body_to_be_parsed
+        item["body"] = strip_tags(body_to_be_parsed) if "<" in body_to_be_parsed else body_to_be_parsed
         item["body_type"] = "html"
-        item["authors"] = metadata.get("Author")
+        authors = metadata.get("Author")
+        item["authors"] = authors if authors else []
         item["domain"] = self.start_urls[0]
         item["url"] = response.url
-        item["created_at"] = convert_to_iso_datetime(metadata.get("Created")[0])
+        created = metadata.get("Created")
+        item["created_at"] = convert_to_iso_datetime(created[0]) if created else datetime.utcnow().isoformat()
         item["indexed_at"] = datetime.utcnow().isoformat()
         return item
 

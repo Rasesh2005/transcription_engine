@@ -16,7 +16,7 @@ class BoltsSpider(CrawlSpider):
 
     rules = (
         Rule(
-            LinkExtractor(restrict_xpaths="//span/a[contains(@href, 'md')]"),
+            LinkExtractor(allow=r"blob/master/.*\.md$"),
             callback="parse_item",
         ),
     )
@@ -30,18 +30,41 @@ class BoltsSpider(CrawlSpider):
 
         soup = BeautifulSoup(response.text, "html.parser")
         script_tags = soup.find_all("script")
-        res = script_tags[-1]
-        json_object = json.loads(res.contents[0])
-        payload = json_object["payload"]
-        body_to_be_parsed = payload["blob"]["richText"]
-        item["id"] = "bolts-" + str(uuid.uuid4())
-        item["title"] = BeautifulSoup(body_to_be_parsed, "html.parser").find("h1").text
-
-        if not item["title"]:
+        json_object = None
+        for script in script_tags:
+            try:
+                if script.string:
+                    data = json.loads(script.string)
+                    if "payload" in data:
+                        json_object = data
+                        break
+            except Exception:
+                continue
+        if not json_object:
             return None
 
-        item["body_formatted"] = strip_attributes(body_to_be_parsed)
-        item["body"] = strip_tags(body_to_be_parsed)
+        payload = json_object["payload"]
+        if "blob" in payload and "richText" in payload["blob"]:
+            body_to_be_parsed = payload["blob"]["richText"]
+        else:
+            raw_lines = payload.get("codeViewBlobLayoutRoute.StyledBlob", {}).get("rawLines", [])
+            body_to_be_parsed = "\n".join(raw_lines)
+
+        item["id"] = "bolts-" + str(uuid.uuid4())
+        
+        if "<h1" in body_to_be_parsed.lower():
+            title_node = BeautifulSoup(body_to_be_parsed, "html.parser").find("h1")
+            item["title"] = title_node.text.strip() if title_node else "Untitled"
+        else:
+            match = re.search(r'^#\s+(.+)$', body_to_be_parsed, re.MULTILINE)
+            item["title"] = match.group(1).strip() if match else "Untitled"
+
+        if not item["title"] or item["title"] == "Untitled":
+            # Some bolts don't have an h1, fallback to filename or skip
+            item["title"] = response.url.split("/")[-1].replace(".md", "")
+
+        item["body_formatted"] = strip_attributes(body_to_be_parsed) if "<" in body_to_be_parsed else body_to_be_parsed
+        item["body"] = strip_tags(body_to_be_parsed) if "<" in body_to_be_parsed else body_to_be_parsed
         item["body_type"] = "html"
         item["authors"] = ["Spec"]
         item["domain"] = "https://github.com/lightning/bolts"

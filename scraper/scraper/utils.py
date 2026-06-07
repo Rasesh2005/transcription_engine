@@ -1,53 +1,36 @@
-import os
-import re
-import unicodedata
-from typing import Tuple
-
-from markdownify import markdownify as md
+from datetime import datetime
+from typing import Optional
 
 
-def slugify(value: str) -> str:
-    """
-    Convert a string to a URL-friendly slug.
-    - Normalize to ASCII
-    - Replace spaces, underscores and directory separators with hyphens
-    - Remove characters that aren't alphanumerics, underscores, or hyphens
-    - Convert to lowercase
-    - Strip leading and trailing hyphens
-    """
-    # Normalize to ASCII
-    value = (
-        unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
-    )
-    # Replace directory separators to hyphens
-    value = value.replace(os.sep, "-")
+def parse_standard_date_formats(date_str: str) -> Optional[str]:
+    """Try to parse date string using common formats, return ISO format if successful."""
+    # List of common date formats to try
+    formats = [
+        # Standard dates
+        "%Y-%m-%d",  # 2024-03-13
+        "%Y/%m/%d",  # 2024/03/13
+        # Full month name
+        "%B %d, %Y",  # March 13, 2024
+        "%d %B %Y",  # 13 March 2024
+        # Abbreviated month
+        "%b %d, %Y",  # Jan 16, 2024
+        "%d %b %Y",  # 16 Jan 2024
+        # With times
+        "%Y-%m-%d %H:%M:%S",  # 2024-03-13 14:30:00
+        "%Y-%m-%d %H:%M",  # 2024-03-13 14:30
+        "%B %d, %Y, %I:%M:%S %p",  # March 13, 2024, 02:30:00 PM
+        "%B %d, %Y, %I:%M %p",  # March 13, 2024, 02:30 PM
+        "%b %d, %Y, %I:%M:%S %p",  # Jan 13, 2024, 02:30:00 PM
+        "%b %d, %Y, %I:%M %p",  # Jan 13, 2024, 02:30 PM
+        "%d %B %Y %H:%M:%S",  # 13 March 2024 14:30:00
+        "%d %B %Y %H:%M",  # 13 March 2024 14:30
+        "%d %b %Y %H:%M:%S",  # 13 Jan 2024 14:30:00
+        "%d %b %Y %H:%M",  # 13 Jan 2024 14:30
+    ]
 
-    # Replace spaces and underscores with hyphens, remove invalid characters
-    value = re.sub(r"[_\s]+", "-", value)  # Replace spaces and underscores
-    value = re.sub(r"[^\w-]", "", value)  # Remove invalid characters
-
-    # Convert to lowercase and strip leading/trailing hyphens
-    return value.strip("-").lower()
-
-
-def strip_emails(text: str) -> str:
-    """Remove email addresses from the given text."""
-    return re.sub(r"<.*?>", "", text).strip()
-
-
-def html_to_markdown(html_content: str) -> Tuple[str, dict]:
-    """
-    Convert HTML content to markdown format.
-
-    Args:
-        html_content: The HTML content to convert
-
-    Returns:
-        Tuple containing:
-        - The converted markdown content
-        - Original content object with format and body
-    """
-    markdown_content = md(html_content)
-    original = {"format": "html", "body": html_content}
-
-    return markdown_content, original
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str.strip(), fmt).isoformat()
+        except ValueError:
+            continue
+    return None

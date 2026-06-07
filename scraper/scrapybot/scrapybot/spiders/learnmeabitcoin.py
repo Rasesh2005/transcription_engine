@@ -21,14 +21,21 @@ class LearnmeabitcoinSpider(CrawlSpider):
     def parse_item(self, response):
         item = {}
 
-        article = response.xpath("//article/div/p").getall()  # returns a list
+        article = response.xpath("//main//p").getall()  # returns a list
+        if not article:
+            article = response.xpath("//p").getall()
+            
         body_to_be_parsed = "".join(article)  # turn list of paragraphs to one string
 
-        if not body_to_be_parsed:
+        if not body_to_be_parsed.strip():
             return None
 
         item["id"] = "learnmeabitcoin-" + str(uuid.uuid4())
-        item["title"] = response.xpath("//header/h1/text()").get()
+        
+        title = response.xpath("//h1/text()").get()
+        if not title:
+            title = response.xpath("//title/text()").get()
+        item["title"] = title.strip() if title else None
 
         if not item["title"]:
             return None

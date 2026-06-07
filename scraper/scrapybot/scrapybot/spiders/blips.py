@@ -15,7 +15,7 @@ class BlipsSpider(CrawlSpider):
 
     rules = (
         Rule(
-            LinkExtractor(restrict_xpaths="//table/tbody/tr/td/a"),
+            LinkExtractor(allow=r"blob/master/.*\.md$"),
             callback="parse_item",
         ),
     )
@@ -24,26 +24,52 @@ class BlipsSpider(CrawlSpider):
         item = {}
         soup = BeautifulSoup(response.text, "html.parser")
         script_tags = soup.find_all("script")
-        res = script_tags[-1]
-        json_object = json.loads(res.contents[0])
-        payload = json_object["payload"]
-        article = payload["blob"]["richText"]
-        details = BeautifulSoup(article, "html.parser").find("code").text
-        details = details.split("\n")
-        blip_info = get_details(details[:-1])
-        item["id"] = "blips-" + str(uuid.uuid4())
-        item["title"] = blip_info.get("Title")
-
-        if not item["title"]:
+        json_object = None
+        for script in script_tags:
+            try:
+                if script.string:
+                    data = json.loads(script.string)
+                    if "payload" in data:
+                        json_object = data
+                        break
+            except Exception:
+                continue
+        if not json_object:
             return None
+            
+        payload = json_object["payload"]
+        if "blob" in payload and "richText" in payload["blob"]:
+            article = payload["blob"]["richText"]
+            try:
+                details_text = BeautifulSoup(article, "html.parser").find("code").text
+            except Exception:
+                details_text = ""
+        else:
+            raw_lines = payload.get("codeViewBlobLayoutRoute.StyledBlob", {}).get("rawLines", [])
+            article = "\n".join(raw_lines)
+            # Find metadata block (often fenced by ``` or --- at start)
+            details_text = "\n".join(raw_lines[:25])
+            
+        details = details_text.split("\n")
+        blip_info = get_details(details)
+        item["id"] = "blips-" + str(uuid.uuid4())
+        
+        # Robustly handle missing metadata fields
+        title = blip_info.get("Title")
+        item["title"] = title if title else "Untitled"
 
-        item["body_formatted"] = strip_attributes(article)
-        item["body"] = strip_tags(article)
+        if not item["title"] or item["title"] == "Untitled":
+            item["title"] = response.url.split("/")[-1].replace(".md", "")
+
+        item["body_formatted"] = strip_attributes(article) if "<" in article else article
+        item["body"] = strip_tags(article) if "<" in article else article
         item["body_type"] = "html"
-        item["authors"] = [blip_info.get("Author")]
+        author = blip_info.get("Author")
+        item["authors"] = [author] if author else []
         item["domain"] = self.start_urls[0]
         item["url"] = response.url
-        item["created_at"] = convert_to_iso_datetime(blip_info.get("Created"))
+        created = blip_info.get("Created")
+        item["created_at"] = convert_to_iso_datetime(created) if created else datetime.utcnow().isoformat()
         item["indexed_at"] = datetime.utcnow().isoformat()
 
         return item
