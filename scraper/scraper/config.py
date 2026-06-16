@@ -28,13 +28,13 @@ def get_project_root():
 class Settings:
     def __init__(self):
         # Reload environment variables from .env file
-        load_dotenv(override=True)
+        load_dotenv(override=False)
 
     def load_sources(self) -> Dict[str, List[SourceConfig]]:
         sources_path = os.path.join(get_project_root(), "sources.yaml")
         try:
             with open(sources_path, "r") as file:
-                data = yaml.safe_load(file)
+                data = yaml.safe_load(file) or {}
         except FileNotFoundError:
             print(f"Warning: {sources_path} not found. Using empty sources.")
             return {}

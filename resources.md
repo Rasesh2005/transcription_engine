@@ -33,8 +33,7 @@
 
 ### Research Blogs
 
-* [BitMEX Research Blog](http://bitmex.com/blog/research
-) ✔ PROVIDED
+* [BitMEX Research Blog](http://bitmex.com/blog/research) ✔ PROVIDED
 * [Blockstream Blog](https://blog.blockstream.com) ➕ NEW
 
 

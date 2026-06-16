@@ -45,6 +45,4 @@ update_changelog_on_bump = true
 
 [tool.poetry.scripts]
 scraper = "scraper.cli:cli"
-playground = "scraper.run_jupyter:main"
-notebook = "scraper.run_jupyter:main"
 

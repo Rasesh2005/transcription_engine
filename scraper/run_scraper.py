@@ -9,6 +9,7 @@ from loguru import logger
 import os
 
 log_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs", "server_dev.log"))
+os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 logger.remove()
 logger.add(log_file_path, level="DEBUG", rotation="10 MB", retention="7 days")
 
@@ -30,8 +31,11 @@ async def main():
 
     for src in targets:
         logger.info(f"Starting scrape: {src.name}")
-        scraper = ScraperFactory.create_scraper(src, "text")
-        await scraper.run()
+        try:
+            scraper = ScraperFactory.create_scraper(src, "text")
+            await scraper.run()
+        except Exception as e:
+            logger.error(f"Error scraping {src.name}: {e}")
         logger.info(f"Finished scrape: {src.name}")
 
 if __name__ == "__main__":

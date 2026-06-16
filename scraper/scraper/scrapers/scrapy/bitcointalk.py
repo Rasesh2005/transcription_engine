@@ -32,14 +32,14 @@ class BitcoinTalkSpider(BaseSpider):
             date_text: The date string to parse
 
         Returns:
-            Optional[datetime]: The parsed datetime object, or None if parsing fails
+            Optional[str]: The parsed datetime string in ISO format, or None if parsing fails
         """
 
         def _parse_date_format(text: str) -> Optional[str]:
             # Handle "Today" format
-            if text.startswith("Todayat"):
+            if text.startswith("Today at"):
                 try:
-                    time_str = text.replace("Todayat ", "").strip()
+                    time_str = text.replace("Today at ", "").strip()
                     today = datetime.now()
                     time = datetime.strptime(time_str, "%I:%M:%S %p").time()
                     return datetime.combine(today.date(), time).isoformat()

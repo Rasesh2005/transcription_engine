@@ -16,16 +16,13 @@ from scraper.scraper_factory import ScraperFactory
 # The reactor pattern ensures proper coordination between these frameworks and prevents
 # event loop conflicts. This affects all async operations in the CLI (scraping, cleanup, etc).
 
-import os
-
-log_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logs", "server_dev.log"))
-logger.remove()
-logger.add(log_file_path, level="DEBUG", rotation="10 MB", retention="7 days")
-
-
 @click.group()
 def cli():
     """Scrape data from a variety of sources."""
+    log_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logs", "server_dev.log"))
+    os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+    logger.remove()
+    logger.add(log_file_path, level="DEBUG", rotation="10 MB", retention="7 days")
     pass
 
 
@@ -42,7 +39,7 @@ def run_in_reactor(coro):
 @click.option("--source", help="Name of the source to scrape from sources.yaml")
 @click.option(
     "--output",
-    type=click.Choice(settings.registered_output_types),
+    type=click.STRING,
     default="text",
     help="Where to send the scraped data",
 )
@@ -60,8 +57,8 @@ def scrape(source, output):
     """
     try:
         asyncioreactor.install()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to install asyncioreactor: {e}")
 
     def run_scraper(reactor):
         async def run_scraping():
@@ -79,23 +76,16 @@ def scrape(source, output):
                         f"Error: Source '{source}' not found. Please check the source name and try again."
                     )
                     return
-
-                for src in sources_to_scrape:
-                    try:
-                        scraper = ScraperFactory.create_scraper(src, output)
-                        await scraper.run()
-                    except Exception as e:
-                        click.echo(f"Error scraping {src.name}: {str(e)}")
-                        logger.exception("Full traceback:")
-
             else:
-                for src in all_sources:
-                    try:
-                        scraper = ScraperFactory.create_scraper(src, output)
-                        await scraper.run()
-                    except Exception as e:
-                        click.echo(f"Error scraping {src.name}: {str(e)}")
-                        logger.exception("Full traceback:")
+                sources_to_scrape = all_sources
+
+            for src in sources_to_scrape:
+                try:
+                    scraper = ScraperFactory.create_scraper(src, output)
+                    await scraper.run()
+                except Exception as e:
+                    click.echo(f"Error scraping {src.name}: {str(e)}")
+                    logger.exception("Full traceback:")
 
         return run_in_reactor(run_scraping())
 

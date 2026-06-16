@@ -54,7 +54,10 @@ class PRReviewClubScraper(GithubScraper):
         """
         document_data["number"] = metadata.get("pr", None)
         document_data["host"] = metadata.get("host", [])
-        document_data["tags"] = metadata.get("components", []) or []
+        tags = metadata.get("components", []) or []
+        if not isinstance(tags, list):
+            tags = [tags]
+        document_data["tags"] = tags
 
         # If no PR number exists, this is not a Bitcoin Core PR review
         if not document_data["number"]:
@@ -71,9 +74,6 @@ class PRReviewClubScraper(GithubScraper):
                 )
 
             # Add matched topics to tags
-            if isinstance(document_data["tags"], list):
-                document_data["tags"].extend(list(matching_topics))
-            else:
-                document_data["tags"] = list(matching_topics)
+            document_data["tags"].extend(list(matching_topics))
 
         return document_data

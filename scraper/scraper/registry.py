@@ -8,9 +8,16 @@ class Registry:
         self._registry: Dict[str, Type[T]] = {}
 
     def register(self, *names: str):
+        """Register a class under one or more names."""
+        if not names:
+            raise ValueError("At least one name must be provided to register()")
+
         def decorator(cls: Type[T]):
             for name in names:
-                self._registry[name.lower()] = cls
+                name_lower = name.lower()
+                if name_lower in self._registry:
+                    raise ValueError(f"Name '{name}' is already registered in registry")
+                self._registry[name_lower] = cls
             return cls
 
         return decorator

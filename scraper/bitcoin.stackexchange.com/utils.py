@@ -39,6 +39,8 @@ def extract_dump(download_path, extract_path):
             print("Extracted Path", extract_path)
             subprocess.check_call(["7z", "x", "-o" + extract_path, download_path])
         logger.info(f"Extraction successful to path: {os.path.abspath(download_path)}")
+    except FileNotFoundError as e:
+        logger.error(f"7z binary not found: {e}. Please ensure 7-Zip is installed.")
     except subprocess.CalledProcessError as e:
         logger.error(f"Extraction failed: {e}")
 
@@ -48,7 +50,7 @@ def download_dump(download_path):
     logger.info('downloading the data from archive...')
     archive_url = "https://archive.org/download/stackexchange/bitcoin.stackexchange.com.7z"
     try:
-        r = requests.get(archive_url, stream=True)
+        r = requests.get(archive_url, stream=True, timeout=60)
         if r.status_code == 200:
             with open(download_path, "wb") as f:
                 for chunk in tqdm(r.iter_content(chunk_size=1024)):

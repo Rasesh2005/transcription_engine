@@ -28,11 +28,13 @@ jobs:
       - name: Install release
         run: |
           # Get the wheel filename from the release assets
-          WHEEL_URL=$(curl -s https://api.github.com/repos/bitcoinsearch/scraper/releases/latest | jq -r '.assets[] | select(.name | endswith(".whl")) | .browser_download_url')
-          pip install $WHEEL_URL
+          RELEASE_VERSION=${{ steps.latest_release.outputs.release }}
+          WHEEL_URL=$(curl -sf https://api.github.com/repos/bitcoinsearch/scraper/releases/tags/$RELEASE_VERSION | jq -r '.assets[] | select(.name | endswith(".whl")) | .browser_download_url')
+          if [ -z "$WHEEL_URL" ]; then echo "Error: Wheel URL not found"; exit 1; fi
+          pip install "$WHEEL_URL"
 
       - name: Run scraper
-        run: scraper scrape --source ${{ inputs.source }}
+        run: scraper scrape --source "${{ inputs.source }}"
         env:
           CLOUD_ID: ${{ secrets.CLOUD_ID }}
           API_KEY: ${{ secrets.API_KEY }}

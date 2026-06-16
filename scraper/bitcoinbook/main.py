@@ -27,10 +27,16 @@ if __name__ == "__main__":
     documents = []
     for url in chapter_links:
         try:
-            data = requests.get(url).text
-            soup = BeautifulSoup(data, 'html.parser')
-            title = soup.find('h2', dir='auto').get_text()
-            body = soup.find('div', id='readme').get_text()
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'html.parser')
+            title_tag = soup.find('h2', dir='auto')
+            body_tag = soup.find('div', id='readme')
+            if not title_tag or not body_tag:
+                logger.error(f"Missing title or body in {url}")
+                continue
+            title = title_tag.get_text()
+            body = body_tag.get_text()
             body_type = "md"
             author = "Andreas Antonopoulous"
             chapter_number = ''.join(re.findall(r'\d+', url))

@@ -5,6 +5,8 @@ on:
     - cron: '0 13 * * 3' # every Wednesday at 1pm UTC
   workflow_dispatch:
   repository_dispatch:
+    types:
+      - trigger-bitcointranscripts
 
 jobs:
   bitcointranscripts:

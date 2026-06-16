@@ -45,7 +45,7 @@ class ScraperFactory:
             output = output_class(
                 source_name=source.name,
                 index_name=settings.DEFAULT_INDEX if hasattr(settings, "DEFAULT_INDEX") else None,
-                batch_size=settings.config.getint("batch_size", 100) if settings.config else 100,
+                batch_size=100,
             )
 
             scraper = scraper_class(source, output, processor_manager)

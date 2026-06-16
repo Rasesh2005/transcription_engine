@@ -20,20 +20,6 @@ def scrapy():
     pass
 
 
-def load_spider_config(source_name: str) -> Optional[SpiderConfig]:
-    """Load spider configuration for a source."""
-    config_path = (
-        Path(get_project_root())
-        / "scrapy_sources_configs"
-        / f"{source_name.lower()}.yaml"
-    )
-
-    if not config_path.exists():
-        return None
-
-    return SpiderConfig(str(config_path))
-
-
 def create_empty_config() -> ScrapingConfig:
     """Create an empty scraping configuration using selector type models."""
     return ScrapingConfig(
@@ -125,6 +111,8 @@ def init(source: str):
         click.echo("\nNext steps:")
         click.echo("1. Add selectors to the configuration file")
 
+    except click.ClickException:
+        raise
     except Exception as e:
         click.echo(f"Error initializing Scrapy configuration: {str(e)}", err=True)
         logger.exception("Full traceback:")

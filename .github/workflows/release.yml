@@ -27,7 +27,7 @@ jobs:
 
       - id: cz
         name: Create bump and changelog
-        uses: commitizen-tools/commitizen-action@master
+        uses: commitizen-tools/commitizen-action@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
