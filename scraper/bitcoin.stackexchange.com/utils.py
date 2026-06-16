@@ -61,6 +61,11 @@ def download_dump(download_path):
             logger.error(f"Request returned an error: {r.status_code}")
     except requests.RequestException as e:
         logger.error(f"An error occurred while downloading: {e}")
+        if os.path.exists(download_path):
+            try:
+                os.remove(download_path)
+            except OSError as rm_e:
+                logger.error(f"Failed to clean up partial download: {rm_e}")
 
 
 class MLStripper(HTMLParser):

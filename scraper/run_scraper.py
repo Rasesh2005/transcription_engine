@@ -35,7 +35,7 @@ async def main():
             scraper = ScraperFactory.create_scraper(src, "text")
             await scraper.run()
         except Exception as e:
-            logger.error(f"Error scraping {src.name}: {e}")
+            logger.exception(f"Error scraping {src.name}: {e}")
         logger.info(f"Finished scrape: {src.name}")
 
 if __name__ == "__main__":

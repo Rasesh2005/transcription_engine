@@ -8,6 +8,7 @@ from scraper.commands.scrapy import scrapy
 from scraper.commands.github import github
 from scraper.config import settings
 from scraper.scraper_factory import ScraperFactory
+from scraper.registry import output_registry
 
 
 # Technical implementation note:
@@ -39,7 +40,7 @@ def run_in_reactor(coro):
 @click.option("--source", help="Name of the source to scrape from sources.yaml")
 @click.option(
     "--output",
-    type=click.STRING,
+    type=click.Choice(list(output_registry._registry.keys())),
     default="text",
     help="Where to send the scraped data",
 )
