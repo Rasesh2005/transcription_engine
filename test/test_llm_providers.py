@@ -113,10 +113,16 @@ def test_correction_service_uses_correct_provider(provider, tmp_config, monkeypa
     _inject_key(provider, monkeypatch)
     tmp_config({"llm_provider": "openai", "asr_provider": "whisper"})
 
-    patch_corr = patch("app.services.correction.genai") if provider == "google" else None
-    try:
-        if patch_corr:
-            patch_corr.start()
+    if provider == "google":
+        with patch("app.services.correction.genai") as patch_corr:
+            from app.transcription import Transcription
+            t = Transcription(
+                llm_provider=provider,
+                correct=True,
+                test_mode=True,
+                username="test_user",
+            )
+    else:
         from app.transcription import Transcription
         t = Transcription(
             llm_provider=provider,
@@ -124,9 +130,7 @@ def test_correction_service_uses_correct_provider(provider, tmp_config, monkeypa
             test_mode=True,
             username="test_user",
         )
-    finally:
-        if patch_corr:
-            patch_corr.stop()
+
 
     assert t.correction_service is not None
     assert t.correction_service.provider == provider
@@ -249,7 +253,7 @@ def test_unsupported_llm_provider_raises(tmp_config, monkeypatch):
     tmp_config({"asr_provider": "whisper"})
 
     from app.transcription import Transcription
-    with pytest.raises((ValueError, Exception)):
+    with pytest.raises(ValueError):
         Transcription(
             llm_provider="nonexistent_llm",
             correct=True,

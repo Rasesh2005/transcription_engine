@@ -229,10 +229,11 @@ def test_payload_schema_matches_golden(test_video_path, transcript_txt_path,
     with open(golden_path) as f:
         golden = json.load(f)
 
-    assert list(golden.keys()) == list(payload.keys())
+    assert set(golden.keys()) == set(payload.keys())
     for k in golden:
         if k == "content":
-            for key in golden[k]:
+            assert set(golden["content"].keys()) == set(payload["content"].keys())
+            for key in golden["content"]:
                 if key == "loc":
                     assert payload[k][key][-9:] == golden[k][key][-9:]
                 elif key == "media":
@@ -244,3 +245,4 @@ def test_payload_schema_matches_golden(test_video_path, transcript_txt_path,
                     )
         else:
             assert payload[k] == golden[k]
+

@@ -45,9 +45,6 @@ def _check_summarize_enabled(t, val):
 def _check_github(t, val):
     assert t.github is val
 
-def _check_markdown(t, val):
-    # test_mode=True forces markdown=True regardless — test directly on the kwarg path
-    assert t.markdown is val
 
 def _check_needs_review(t, val):
     if val:
@@ -58,14 +55,6 @@ def _check_needs_review(t, val):
 def _check_nocleanup(t, val):
     assert t.nocleanup is val
 
-def _check_markdown_exporter(t, val):
-    assert ("markdown" in t.exporters) is val
-
-def _check_text_exporter(t, val):
-    assert ("text" in t.exporters) is val
-
-def _check_json_exporter(t, val):
-    assert ("json" in t.exporters) is val
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 """
 Section 4 — Processing Pipeline Tests
 =======================================
-Autodiscovery: the four meaningful combinations of ``--correct`` × ``--summarize``
+Autodiscovery: the four meaningful combinations of ``--correct`` x ``--summarize``
 are expressed as a parametrize table.  Each combination asserts:
 - The correct services are non-None (enabled) or None (disabled).
 - The ``pipeline_state["stages"]`` dict contains precisely the expected keys.

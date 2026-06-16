@@ -177,9 +177,9 @@ class TestMarkdownExporter:
 
     def test_error_handling_no_content(self, markdown_exporter, mock_transcript):
         mock_transcript.outputs["raw"] = None
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="No transcript content found"):
             markdown_exporter.export(mock_transcript)
-        assert "No transcript content found" in str(exc_info.value)
+
 
 
 # ===========================================================================
@@ -256,9 +256,9 @@ class TestTextExporter:
 
     def test_error_handling_no_content(self, text_exporter, mock_transcript):
         mock_transcript.outputs["raw"] = None
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="No content found for key: raw"):
             text_exporter.export(mock_transcript)
-        assert "No content found for key: raw" in str(exc_info.value)
+
 
     def test_output_directory_creation(self, temp_dir, mock_transcript):
         exporter = TextExporter(temp_dir)

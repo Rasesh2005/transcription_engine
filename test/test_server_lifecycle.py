@@ -79,8 +79,9 @@ class TestServerLifecycle:
         assert stopped, "stop_server() returned False"
 
         # Give the OS a moment to release the port
-        reachable = _wait_until(lambda: _is_running(SERVER_URL), timeout=5)
-        assert not reachable, "/health still reachable after stop"
+        became_unreachable = _wait_until(lambda: not _is_running(SERVER_URL), timeout=5)
+        assert became_unreachable, "/health still reachable after stop"
+
 
     def test_server_start_makes_health_reachable(self):
         """After starting the server, GET /health must return 200."""
@@ -128,4 +129,26 @@ class TestServerLifecycle:
         with patch("app.commands.cli_utils.is_server_running", return_value=False), \
              patch("app.commands.cli_utils.start_server", return_value=True) as mock_start:
             from app.commands.cli_utils import auto_start_server
+            import click
+            
             assert mock_start.call_count == 0  # Not called yet
+
+            mock_ctx = MagicMock()
+            mock_ctx.protected_args = []
+            mock_ctx.help_option_names = ["--help", "-h"]
+            mock_ctx.command.name = "transcribe"
+            mock_ctx.obj = {"auto_server": True}
+            mock_ctx.invoke = lambda f, *a, **kw: f(*a, **kw)
+
+            @auto_start_server
+            def dummy_func():
+                return "execution_result"
+
+            res = dummy_func(mock_ctx)
+            assert res == "execution_result"
+            assert mock_start.call_count == 1
+
+            captured = capsys.readouterr()
+            assert "Auto-starting server for command" in captured.out
+            assert "starting" in captured.out or "server" in captured.out
+

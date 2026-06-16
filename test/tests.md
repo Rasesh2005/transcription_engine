@@ -265,7 +265,7 @@ tstbtc transcribe "test/testAssets/audio.mp3" \
   --title "Correction Test"
 ```
 **Expected log sequence:**
-```
+```log
 Initialized LLM service: MetadataExtractorService(...)
 Initialized LLM service: CorrectionService(...)
 # NO SummarizerService
@@ -298,7 +298,7 @@ tstbtc transcribe "test/testAssets/audio.mp3" \
   --title "Full Pipeline Test"
 ```
 **Expected log order:**
-```
+```log
 Initialized LLM service: MetadataExtractorService(...)
 Initialized LLM service: CorrectionService(...)
 Initialized LLM service: SummarizerService(...)
@@ -380,7 +380,7 @@ tstbtc transcribe "test/testAssets/audio.mp3" \
   --title "AutoStart Test"
 ```
 **Expected output:**
-```
+```log
 Auto-starting server for command: transcribe
 Transcription server is not running. Starting it automatically...
 Server logs will be written to: logs/server_dev.log
