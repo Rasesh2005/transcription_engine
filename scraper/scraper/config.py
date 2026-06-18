@@ -2,7 +2,7 @@ import os
 import configparser
 import yaml
 from dotenv import load_dotenv
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from scraper.models import SourceConfig
 
@@ -45,6 +45,26 @@ class Settings:
 
         return sources
 
+    def get_source_config(self, source_name: str) -> Optional[SourceConfig]:
+        sources = self.load_sources()
+        for source_list in sources.values():
+            for src in source_list:
+                if src.name.lower() == source_name.lower():
+                    return src
+        return None
+
+    def get_config_overview(self) -> str:
+        overview = ["Configuration Overview:", "-" * 20]
+        overview.append(f"Project Root: {get_project_root()}")
+        
+        sources = self.load_sources()
+        total_sources = sum(len(src_list) for src_list in sources.values())
+        overview.append(f"Total Sources Configured: {total_sources}")
+        
+        for source_type, src_list in sources.items():
+            overview.append(f"  {source_type.upper()}: {len(src_list)} sources")
+            
+        return "\n".join(overview)
 # Initialize the Settings class and expose an instance
 settings = Settings()
 

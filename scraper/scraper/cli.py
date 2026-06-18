@@ -3,6 +3,7 @@ from twisted.internet import asyncioreactor, defer
 from twisted.internet.task import react
 from loguru import logger
 import sys
+import os
 
 from scraper.commands.scrapy import scrapy
 from scraper.commands.github import github
