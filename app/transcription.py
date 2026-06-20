@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import time
+import urllib.parse
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
@@ -23,7 +24,7 @@ from app.services.metadata_extractor import MetadataExtractorService
 from app.services.summarizer import SummarizerService
 
 # from app.metadata_parser import MetadataParser
-from app.transcript import RSS, Audio, Playlist, Source, Transcript, Video, _yt_opts
+from app.transcript import RSS, Audio, Playlist, Source, Transcript, Video, Scraper, _yt_opts
 
 
 class Transcription:
@@ -260,12 +261,22 @@ class Transcription:
                 raise Exception(f"Invalid source: {e}")
 
         try:
-            if source.source_file.lower().endswith(
+            lower_url = source.source_file.lower()
+            if lower_url.endswith(
                 (".mp3", ".wav", ".m4a", ".aac")
             ):
                 return Audio(source=source, chapters=chapters)
-            if source.source_file.endswith(("rss", ".xml")):
-                return RSS(source=source)
+            
+            if lower_url.endswith(("rss", ".xml")):
+                # Strong structural signal — attempt RSS parse directly.
+                try:
+                    return RSS(source=source)
+                except Exception as rss_exc:
+                    # feedparser rejected it; log and fall through to other handlers.
+                    self.logger.debug(
+                        f"RSS parse failed for '{source.source_file}', "
+                        f"falling through to next handler: {rss_exc}"
+                    )
 
             if youtube_metadata is not None:
                 # we have youtube metadata, this can only be true for videos
@@ -275,10 +286,20 @@ class Transcription:
                     youtube_metadata=youtube_metadata,
                     chapters=chapters,
                 )
-            if source.source_file.lower().endswith((".mp4", ".webm", ".mov")):
+            if lower_url.endswith((".mp4", ".webm", ".mov")):
                 # regular remote video, not youtube
                 source.preprocess = False
                 return Video(source=source)
+                
+            # If it's a web page that is not a known YouTube hostname, use Scraper.
+            # Use hostname (not netloc) and an exact allowlist to prevent bypass via
+            # subdomains like "youtube.com.evil.com" or "www.notyoutube.com".
+            _YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}
+            parsed_url = urllib.parse.urlparse(lower_url)
+            is_youtube = parsed_url.hostname in _YOUTUBE_HOSTS
+            if lower_url.startswith(("http://", "https://")) and not is_youtube:
+                return Scraper(source=source)
+
             youtube_source = check_if_youtube(source)
             if youtube_source == "unknown":
                 raise Exception(f"Invalid source: {source}")
@@ -448,7 +469,7 @@ class Transcription:
                     self._new_transcript_from_source(entry)
                 else:
                     transcription_sources["exist"].append(entry.source_file)
-        elif source.type in ["audio", "video"]:
+        elif source.type in ["audio", "video", "scraper"]:
             if source.media not in excluded_media:
                 transcription_sources["added"].append(source.source_file)
                 self._new_transcript_from_source(source)
@@ -596,8 +617,22 @@ class Transcription:
             if self.test_mode:
                 t.outputs["raw"] = test_transcript or "test-mode"
             else:
-                ensure_media_available(t)
-                self.service.transcribe(t)
+                if getattr(t.source, 'is_text_only', False):
+                    extracted = t.source.extracted_text
+                    if not extracted:
+                        # process() may not have run yet — trigger it now.
+                        t.process_source(t.tmp_dir)
+                        extracted = t.source.extracted_text
+                    if not extracted:
+                        raise ValueError(
+                            f"Scraper for '{t.source.source_file}' produced no text. "
+                            "Check that the page is publicly accessible and contains readable content."
+                        )
+                    t.outputs["raw"] = extracted
+                    self.logger.info("Skipped ASR for text-only source")
+                else:
+                    ensure_media_available(t)
+                    self.service.transcribe(t)
 
         def do_metadata_extraction(t: Transcript) -> None:
             if self.metadata_extractor and not self.test_mode:

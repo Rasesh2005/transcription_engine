@@ -1,5 +1,8 @@
+import ipaddress
 import os
+import socket
 import tempfile
+import urllib.parse
 from datetime import date, datetime
 from typing import Optional, TypedDict
 
@@ -12,6 +15,76 @@ from clint.textui import progress
 from app import logging, utils
 from app.config import settings
 from app.media_processor import MediaProcessor
+
+
+import threading
+from contextlib import contextmanager
+
+# Global lock so that concurrent requests serialise around the monkeypatch.
+# Only one thread at a time may hold the patched getaddrinfo; all others
+# block until it is restored. This prevents races on save/restore of the
+# global function pointer and avoids leaving the patched version in place
+# if two contexts overlap.
+_ssrf_lock = threading.Lock()
+
+@contextmanager
+def _ssrf_protection():
+    """Context manager that patches socket.getaddrinfo to prevent SSRF.
+
+    Thread-safety: a module-level lock serialises concurrent callers so the
+    patch is never active for more than one request at a time.
+
+    IP allowlist: only globally-routable unicast addresses are permitted.
+    This implicitly rejects loopback, private, link-local, multicast,
+    unspecified (0.0.0.0 / ::), and IANA-reserved ranges — catching all the
+    categories a pure denylist approach could miss.
+    """
+    import socket as _socket
+    import ipaddress as _ipaddress
+
+    # Capture the original *inside* the lock so we always snapshot the real
+    # getaddrinfo, never an already-patched version from another thread.
+    with _ssrf_lock:
+        _orig_getaddrinfo = _socket.getaddrinfo
+
+        def safe_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+            addr_infos = _orig_getaddrinfo(host, port, family, type, proto, flags)
+            for res in addr_infos:
+                ip_str = res[4][0]
+                try:
+                    addr = _ipaddress.ip_address(ip_str)
+                except ValueError:
+                    continue
+                # Allowlist approach: only globally-routable IPs are permitted.
+                # is_global is False for loopback, private, link-local, multicast,
+                # unspecified (0.0.0.0/::), and IANA-reserved ranges.
+                if not addr.is_global:
+                    raise ValueError(
+                        f"SSRF Attempt: Resolved IP {addr} for '{host}' is not permitted "
+                        "(only globally-routable addresses are allowed)."
+                    )
+            return addr_infos
+
+        _socket.getaddrinfo = safe_getaddrinfo
+        try:
+            yield
+        finally:
+            _socket.getaddrinfo = _orig_getaddrinfo
+
+
+def _validate_scrape_url(url: str) -> None:
+    """Raise ValueError if *url* is unsafe to fetch from the server.
+
+    Guards against SSRF by rejecting:
+    - Non-HTTP(S) schemes
+    """
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Unsupported URL scheme '{parsed.scheme}' — only http/https are allowed.")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL is missing a hostname.")
+
 
 
 def _yt_opts(**extra):
@@ -602,7 +675,7 @@ class RSS(Source):
                 ),
                 None,
             )
-            if enclosure.type in [
+            if enclosure and enclosure.get("type") in [
                 "audio/mpeg",
                 "audio/wav",
                 "audio/x-m4a",
@@ -635,6 +708,125 @@ class RSS(Source):
                 )
                 self.entries.append(source)
             else:
+                enclosure_type = getattr(enclosure, "type", None) or (enclosure.get("type") if isinstance(enclosure, dict) else None) or "none"
                 self.logger.warning(
-                    f"Invalid source for '{entry.title}'. '{enclosure.type}' not supported for RSS feeds, source skipped."
+                    f"Invalid source for '{entry.title}'. '{enclosure_type}' not supported for RSS feeds, source skipped."
                 )
+
+class Scraper(Source):
+    def __init__(self, source):
+        super().__init__(
+            source_file=source.source_file,
+            link=source.link,
+            loc=source.loc,
+            local=source.local,
+            title=source.title,
+            summary=source.summary,
+            episode=source.episode,
+            date=source.event_date,
+            tags=source.tags,
+            category=source.category,
+            speakers=source.speakers,
+            preprocess=source.preprocess,
+        )
+        self.type = "scraper"
+        self.is_text_only = True
+        self.extracted_text = None
+        self.chapters = []
+        self.description = ""
+        self.author = ""
+        self.youtube_metadata = None
+        # Scraping is deferred to process() so that construction is side-effect-free
+        # and the pipeline's retry/circuit-break logic can manage network failures.
+
+    # Maximum response body size (bytes) accepted from a scraped page.
+    _MAX_SCRAPE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+    def __config_source(self):
+        from bs4 import BeautifulSoup
+        try:
+            _validate_scrape_url(self.source_file)
+            self.logger.info(f"Scraping text from: {self.source_file}")
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5"
+            }
+            # trust_env=False prevents the session from honouring HTTP_PROXY /
+            # HTTPS_PROXY environment variables, which could route traffic through
+            # an attacker-controlled proxy and bypass SSRF protection.
+            session = requests.Session()
+            session.trust_env = False
+            with _ssrf_protection():
+                response = session.get(
+                    self.source_file,
+                    headers=headers,
+                    timeout=(10, 30),   # (connect timeout, read timeout) in seconds
+                    allow_redirects=True,
+                    stream=True,        # stream so we can enforce a size cap
+                )
+            try:
+                response.raise_for_status()
+
+                # Reject non-HTML content types before reading the body.
+                content_type = response.headers.get("Content-Type", "")
+                if "text/html" not in content_type and "application/xhtml" not in content_type:
+                    raise ValueError(
+                        f"Unexpected Content-Type '{content_type}' for {self.source_file}; "
+                        "only HTML pages are supported."
+                    )
+
+                # Check Content-Length if provided before reading.
+                content_length = response.headers.get("Content-Length")
+                if content_length and int(content_length) > self._MAX_SCRAPE_BYTES:
+                    raise ValueError(
+                        f"Response too large ({content_length} bytes) for {self.source_file}; "
+                        f"limit is {self._MAX_SCRAPE_BYTES} bytes."
+                    )
+
+                # Read body with a hard cap regardless of Content-Length.
+                body_chunks = []
+                total = 0
+                for chunk in response.iter_content(chunk_size=65536):
+                    total += len(chunk)
+                    if total > self._MAX_SCRAPE_BYTES:
+                        raise ValueError(
+                            f"Response body exceeded {self._MAX_SCRAPE_BYTES} bytes for "
+                            f"{self.source_file}; aborting download."
+                        )
+                    body_chunks.append(chunk)
+                html_bytes = b"".join(body_chunks)
+                html_text = html_bytes.decode(
+                    response.encoding or "utf-8", errors="replace"
+                )
+            finally:
+                response.close()
+
+            soup = BeautifulSoup(html_text, "html.parser")
+
+            # Store the scraped page title separately so self.title (which was
+            # used to derive output_path_with_title at enqueue time) stays stable.
+            scraped_title = soup.title.get_text(strip=True) if soup.title else None
+            self.scraped_title = scraped_title or self.title or self.source_file
+
+            for script in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                script.extract()
+
+            text = soup.get_text(separator='\n')
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            self.extracted_text = '\n'.join(chunk for chunk in chunks if chunk)
+            self.logger.info(f"Successfully scraped article: {self.scraped_title}")
+        except Exception as e:
+            self.logger.error(f"Failed to scrape article {self.source_file}: {e}")
+            raise Exception(f"Failed to scrape article: {e}") from e
+
+    def download(self, tmp_dir):
+        # We don't download audio for scraped text articles
+        return None
+
+    def process(self, working_dir):
+        """Scrape the article text. Deferred from __init__ so construction is
+        side-effect-free and the pipeline's retry logic can handle failures."""
+        self.__config_source()
+        return None
